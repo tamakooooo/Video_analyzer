@@ -66,6 +66,7 @@ class BiliBriefPlugin(Star):
         self.note_service = NoteService(
             data_dir=self.data_dir,
             cookies=self.bili_cookies if self.bili_cookies else None,
+            config=self.config,
         )
         self.feishu_wiki_pusher = FeishuWikiPusher(
             app_id=str(self.config.get("feishu_app_id", "")),
@@ -227,8 +228,8 @@ class BiliBriefPlugin(Star):
     @staticmethod
     def _extract_clean_bilibili_url(text: str) -> str:
         """
-        从输入文本中提取并清洗 B站 URL。
-        兼容 Markdown 链接: [title](https://www.bilibili.com/video/xxx)
+        从输入文本中提取并清洗视频 URL（B站/抖音）。
+        兼容 Markdown 链接: [title](https://...)
         """
         if not text:
             return ""
@@ -241,9 +242,10 @@ class BiliBriefPlugin(Star):
         if md_link:
             return md_link.group(1).strip()
 
-        # 直接链接（B站长链 / b23短链）
+        # 直接链接（B站长链 / b23短链 / 抖音链接）
         direct = re.search(
-            r"https?://(?:www\.)?(?:bilibili\.com/video/[^\s)>]+|b23\.tv/[^\s)>]+)", raw
+            r"https?://(?:www\.)?(?:bilibili\.com/video/[^\s)>]+|b23\.tv/[^\s)>]+|douyin\.com/[^\s)>]+|v\.douyin\.com/[^\s)>]+)",
+            raw,
         )
         if direct:
             return direct.group(0).strip()
@@ -459,6 +461,7 @@ class BiliBriefPlugin(Star):
             self.note_service = NoteService(
                 data_dir=self.data_dir,
                 cookies=self.bili_cookies,
+                config=self.config,
             )
             yield event.plain_result("✅ B站登录成功！现在可以使用所有功能了。")
         elif result["status"] == "expired":
@@ -542,31 +545,33 @@ class BiliBriefPlugin(Star):
         if args:
             candidate = self._extract_clean_bilibili_url(args)
             self._log(f"[总结命令] 方式1 清洗后参数: '{candidate}'")
-            if detect_platform(candidate) == "bilibili":
+            if detect_platform(candidate) in {"bilibili", "douyin"}:
                 video_url = candidate
                 self._log(f"[总结命令] 方式1 命中URL: '{video_url}'")
 
-        # 方式2: 用正则从 raw_msg 中找 bilibili URL
+        # 方式2: 用正则从 raw_msg 中找 bilibili/douyin URL
         if not video_url:
             url_match = re.search(
-                r"https?://(?:www\.)?bilibili\.com/video/[A-Za-z0-9/?=&_.]+", raw_msg
+                r"https?://(?:www\.)?(?:bilibili\.com/video/[A-Za-z0-9/?=&_.-]+|douyin\.com/[A-Za-z0-9/?=&_.-]+|v\.douyin\.com/[A-Za-z0-9/?=&_.-]+)",
+                raw_msg,
             )
             if url_match:
                 video_url = url_match.group(0)
                 self._log(f"[总结命令] 方式2 从raw_msg正则匹配: '{video_url}'")
             else:
-                self._log("[总结命令] 方式2 raw_msg中未匹配到bilibili URL")
+                self._log("[总结命令] 方式2 raw_msg中未匹配到bilibili/douyin URL")
 
         # 方式3: 从 full_text (message_obj) 中找
         if not video_url and full_text != raw_msg:
             url_match = re.search(
-                r"https?://(?:www\.)?bilibili\.com/video/[A-Za-z0-9/?=&_.]+", full_text
+                r"https?://(?:www\.)?(?:bilibili\.com/video/[A-Za-z0-9/?=&_.-]+|douyin\.com/[A-Za-z0-9/?=&_.-]+|v\.douyin\.com/[A-Za-z0-9/?=&_.-]+)",
+                full_text,
             )
             if url_match:
                 video_url = url_match.group(0)
                 self._log(f"[总结命令] 方式3 从full_text正则匹配: '{video_url}'")
             else:
-                self._log("[总结命令] 方式3 full_text中未匹配到bilibili URL")
+                self._log("[总结命令] 方式3 full_text中未匹配到bilibili/douyin URL")
 
         # 方式4: 找 b23.tv 短链
         if not video_url:
@@ -592,7 +597,7 @@ class BiliBriefPlugin(Star):
             self._log("[总结命令] 所有方式均未提取到URL, 返回错误")
             self._log("═══════ [总结命令] 结束(无URL) ═══════")
             yield event.plain_result(
-                "❌ 请提供视频链接\n用法: /总结 <B站视频链接>\n"
+                "❌ 请提供视频链接\n用法: /总结 <B站/抖音视频链接>\n"
                 "示例: /总结 https://www.bilibili.com/video/BV1xx..."
             )
             return
@@ -600,9 +605,9 @@ class BiliBriefPlugin(Star):
         video_url = self._extract_clean_bilibili_url(video_url).rstrip(">")
         platform = detect_platform(video_url)
         self._log(f"[总结命令] 最终URL='{video_url}', platform='{platform}'")
-        if platform != "bilibili":
+        if platform not in {"bilibili", "douyin"}:
             self._log("═══════ [总结命令] 结束(非B站) ═══════")
-            yield event.plain_result("❌ 目前仅支持B站视频链接")
+            yield event.plain_result("❌ 目前仅支持B站和抖音视频链接")
             return
 
         yield event.plain_result("⏳ 正在生成总结，请稍候（可能需要1-3分钟）...")

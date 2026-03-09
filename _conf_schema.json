@@ -69,6 +69,48 @@
     ],
     "hint": "fast(快速32kbps) / medium(中等64kbps) / slow(高质128kbps)"
   },
+  "douyin_downloader_runner_path": {
+    "description": "douyin-downloader 入口脚本路径",
+    "type": "string",
+    "default": "",
+    "hint": "例如 /opt/douyin-downloader/run.py；开启抖音总结时必填"
+  },
+  "douyin_downloader_python": {
+    "description": "douyin-downloader Python 命令",
+    "type": "string",
+    "default": "python3",
+    "hint": "用于执行 run.py 的 Python 可执行文件"
+  },
+  "douyin_cookie_ttwid": {
+    "description": "抖音 Cookie ttwid",
+    "type": "string",
+    "default": "",
+    "hint": "可选，建议填写以提升稳定性"
+  },
+  "douyin_cookie_odin_tt": {
+    "description": "抖音 Cookie odin_tt",
+    "type": "string",
+    "default": "",
+    "hint": "可选，建议填写以提升稳定性"
+  },
+  "douyin_cookie_ms_token": {
+    "description": "抖音 Cookie msToken",
+    "type": "string",
+    "default": "",
+    "hint": "可选，建议填写以提升稳定性"
+  },
+  "douyin_cookie_passport_csrf_token": {
+    "description": "抖音 Cookie passport_csrf_token",
+    "type": "string",
+    "default": "",
+    "hint": "可选"
+  },
+  "douyin_cookie_sid_guard": {
+    "description": "抖音 Cookie sid_guard",
+    "type": "string",
+    "default": "",
+    "hint": "可选"
+  },
   "processing_timeout": {
     "description": "处理超时时间 (秒)",
     "type": "int",

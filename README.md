@@ -139,6 +139,13 @@ apt install -y wkhtmltopdf
 | `enable_link` | `true` | 嵌入时间戳标记 |
 | `enable_summary` | `true` | 末尾添加 AI 总结段落 |
 | `download_quality` | `fast` | 音频质量：`fast` / `medium` / `slow` |
+| `douyin_downloader_runner_path` | 空 | douyin-downloader 的 `run.py` 绝对路径（抖音总结必填） |
+| `douyin_downloader_python` | `python3` | 执行 douyin-downloader 的 Python 命令 |
+| `douyin_cookie_ttwid` | 空 | 抖音 Cookie（可选） |
+| `douyin_cookie_odin_tt` | 空 | 抖音 Cookie（可选） |
+| `douyin_cookie_ms_token` | 空 | 抖音 Cookie（可选） |
+| `douyin_cookie_passport_csrf_token` | 空 | 抖音 Cookie（可选） |
+| `douyin_cookie_sid_guard` | 空 | 抖音 Cookie（可选） |
 | `enable_auto_push` | `false` | 启用自动推送新视频总结 |
 | `check_interval_minutes` | `600` | 定时检查间隔（分钟） |
 | `max_subscriptions` | `20` | 每个群最大订阅数 |
@@ -169,6 +176,7 @@ apt install -y wkhtmltopdf
 | **FFmpeg** | 系统 | 音频下载处理 (**必须**) |
 | **wkhtmltopdf** | 系统 | 图片渲染 (开启图片输出时需要) |
 | yt-dlp | Python | B站视频/音频下载 |
+| douyin-downloader | 外部项目 | 抖音视频下载（需自行部署并配置 `run.py` 路径） |
 | aiohttp | Python | 异步 HTTP 请求 |
 | requests | Python | HTTP 请求 |
 | markdown | Python | Markdown → HTML |
@@ -182,6 +190,7 @@ apt install -y wkhtmltopdf
 - 需要在 AstrBot 中配置好 LLM Provider
 - 视频总结生成约需 1-3 分钟
 - 图片渲染失败时会自动回退到纯文本
+- 抖音总结依赖 douyin-downloader，需先配置 `douyin_downloader_runner_path`
 
 ## 🔎 致谢
 
@@ -279,6 +288,13 @@ Scan the QR code with the Bilibili mobile app.
 | `check_interval_minutes` | `600` | Check interval in minutes |
 | `max_subscriptions` | `20` | Max subscriptions per group |
 | `download_quality` | `fast` | Audio quality: `fast` / `medium` / `slow` |
+| `douyin_downloader_runner_path` | empty | Absolute path to douyin-downloader `run.py` (required for Douyin) |
+| `douyin_downloader_python` | `python3` | Python executable used to run douyin-downloader |
+| `douyin_cookie_ttwid` | empty | Douyin cookie (optional) |
+| `douyin_cookie_odin_tt` | empty | Douyin cookie (optional) |
+| `douyin_cookie_ms_token` | empty | Douyin cookie (optional) |
+| `douyin_cookie_passport_csrf_token` | empty | Douyin cookie (optional) |
+| `douyin_cookie_sid_guard` | empty | Douyin cookie (optional) |
 | `push_groups` | empty | Push target QQ groups, comma-separated |
 | `push_users` | empty | Push target QQ users, comma-separated |
 | `enable_feishu_wiki_push` | `true` | Enable Feishu Wiki push (enabled by default) |
@@ -299,6 +315,7 @@ Scan the QR code with the Bilibili mobile app.
 - Requires an LLM Provider configured in AstrBot
 - Summary generation takes ~1-3 minutes per video
 - Falls back to plain text if image rendering fails
+- Douyin summary requires douyin-downloader and configured `douyin_downloader_runner_path`
 
 ## 🔎 Credits
 

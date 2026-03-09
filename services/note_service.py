@@ -7,11 +7,12 @@ from typing import Any
 from astrbot.api import logger
 
 from ..downloaders.bilibili_downloader import BilibiliDownloader
+from ..downloaders.douyin_downloader import DouyinDownloader
 from ..gpt.mindmap_prompt import MINDMAP_PROMPT_TEMPLATE
 from ..gpt.prompt_builder import build_prompt
 from ..transcriber.bcut import BcutTranscriber
 from ..utils.note_helper import replace_content_markers
-from ..utils.url_parser import extract_video_id
+from ..utils.url_parser import detect_platform, extract_video_id
 from .screenshot_extractor import ScreenshotExtractor
 
 
@@ -28,12 +29,23 @@ class NoteService:
     流程: 下载音频 → 获取字幕/转写 → LLM 总结 → 后处理 → 返回 Markdown
     """
 
-    def __init__(self, data_dir: str, cookies: dict | None = None):
+    def __init__(self, data_dir: str, cookies: dict | None = None, config: dict | None = None):
         self.data_dir = data_dir
+        self.config = config or {}
         os.makedirs(data_dir, exist_ok=True)
-        self.downloader = BilibiliDownloader(
+        self.bilibili_downloader = BilibiliDownloader(
             data_dir=os.path.join(data_dir, "audio"),
             cookies=cookies,
+        )
+        self.douyin_downloader = DouyinDownloader(
+            data_dir=os.path.join(data_dir, "audio"),
+            runner_path=str(self.config.get("douyin_downloader_runner_path", "")),
+            python_bin=str(self.config.get("douyin_downloader_python", "python3")),
+            cookie_ttwid=str(self.config.get("douyin_cookie_ttwid", "")),
+            cookie_odin_tt=str(self.config.get("douyin_cookie_odin_tt", "")),
+            cookie_ms_token=str(self.config.get("douyin_cookie_ms_token", "")),
+            cookie_passport_csrf_token=str(self.config.get("douyin_cookie_passport_csrf_token", "")),
+            cookie_sid_guard=str(self.config.get("douyin_cookie_sid_guard", "")),
         )
         self.transcriber = BcutTranscriber()
         self.screenshot_extractor = ScreenshotExtractor()
@@ -60,18 +72,25 @@ class NoteService:
         :param max_length: 总结最大字符数
         :return: Markdown 总结文本
         """
+        audio_meta = None
         try:
+            platform = detect_platform(video_url) or "bilibili"
+            if platform == "douyin":
+                downloader = self.douyin_downloader
+            else:
+                downloader = self.bilibili_downloader
+
             # 1. 下载音频
             logger.info(f"开始下载音频: {video_url}")
             audio_meta = await asyncio.get_running_loop().run_in_executor(
-                None, lambda: self.downloader.download(video_url, quality=quality)
+                None, lambda: downloader.download(video_url, quality=quality)
             )
             logger.info(f"音频下载完成: {audio_meta.title}")
 
             # 2. 获取字幕（优先平台字幕）
             logger.info("尝试获取平台字幕...")
             transcript = await asyncio.get_running_loop().run_in_executor(
-                None, lambda: self.downloader.download_subtitles(video_url)
+                None, lambda: downloader.download_subtitles(video_url)
             )
 
             # 3. 如果没有字幕，使用 bcut 转写
@@ -111,10 +130,10 @@ class NoteService:
 
             # 5. 后处理：替换链接标记
             if enable_link:
-                video_id = extract_video_id(video_url, "bilibili")
+                video_id = extract_video_id(video_url, platform)
                 if video_id:
                     markdown = replace_content_markers(
-                        markdown, video_id=video_id, platform="bilibili"
+                        markdown, video_id=video_id, platform=platform
                     )
 
             # 6. 截断过长内容
@@ -193,10 +212,13 @@ class NoteService:
         video_meta = None
         screenshot_paths: list[str] = []
         try:
+            platform = detect_platform(video_url) or "bilibili"
+            if platform != "bilibili":
+                return []
             logger.info(f"开始下载视频用于截图: {video_url}")
             video_meta = await asyncio.get_running_loop().run_in_executor(
                 None,
-                lambda: self.downloader.download_video(video_url),
+                lambda: self.bilibili_downloader.download_video(video_url),
             )
             duration = float(video_meta.duration or 0)
             if duration <= 0:
