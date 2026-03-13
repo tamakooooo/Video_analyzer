@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import subprocess
 import time
 import uuid
@@ -28,6 +29,7 @@ DATA_DIR = SKILL_DIR / "data"
 IMAGES_DIR = DATA_DIR / "images"
 LOGIN_DIR = DATA_DIR / "douyin_login_sessions"
 BILI_LOGIN_DIR = DATA_DIR / "bilibili_login_sessions"
+PUBLIC_MEDIA_DIR = Path("/tmp/openclaw_media_share")
 
 
 def _load_config(config_path: str | None) -> dict[str, Any]:
@@ -55,6 +57,104 @@ def _save_config(config_path: str | None, config: dict[str, Any]):
     p = _resolve_config_path(config_path)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _build_media_payload(paths: list[str]) -> dict[str, Any]:
+    valid = _to_public_media_paths(paths)
+    tokens = [f"MEDIA: {p}" for p in valid]
+    return {
+        "media_paths": valid,
+        "media_tokens": tokens,
+        "media_message": "\n".join(tokens),
+    }
+
+
+def _to_public_media_paths(paths: list[str]) -> list[str]:
+    PUBLIC_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    out: list[str] = []
+    for p in paths or []:
+        src = str(p or "").strip()
+        if not src:
+            continue
+        if src.startswith("http://") or src.startswith("https://"):
+            out.append(src)
+            continue
+        try:
+            src_path = Path(src)
+            if not src_path.exists() or not src_path.is_file():
+                continue
+            uploaded_url = _upload_public_image(src_path)
+            if uploaded_url:
+                out.append(uploaded_url)
+                continue
+            if PUBLIC_MEDIA_DIR in src_path.parents:
+                out.append(str(src_path))
+                continue
+            suffix = src_path.suffix or ".png"
+            dst = PUBLIC_MEDIA_DIR / f"{int(time.time() * 1000)}_{uuid.uuid4().hex}{suffix}"
+            shutil.copy2(src_path, dst)
+            out.append(str(dst))
+        except Exception:
+            continue
+    return out
+
+
+def _upload_public_image(src_path: Path) -> str:
+    """上传二维码到公网图床，失败返回空字符串。"""
+    if not src_path.exists() or not src_path.is_file():
+        return ""
+    if src_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+        return ""
+
+    # 方案 A：优先 0x0.st（免鉴权），失败回退 catbox
+    providers = [
+        ("https://0x0.st", _upload_to_0x0),
+        ("https://catbox.moe/user/api.php", _upload_to_catbox),
+    ]
+    for _, fn in providers:
+        try:
+            url = fn(src_path)
+            if url and url.startswith(("http://", "https://")):
+                return url.strip()
+        except Exception:
+            continue
+    return ""
+
+
+def _upload_to_0x0(src_path: Path) -> str:
+    with src_path.open("rb") as f:
+        resp = requests.post(
+            "https://0x0.st",
+            files={"file": (src_path.name, f, "application/octet-stream")},
+            timeout=20,
+        )
+    if resp.status_code != 200:
+        return ""
+    return str(resp.text or "").strip()
+
+
+def _upload_to_catbox(src_path: Path) -> str:
+    with src_path.open("rb") as f:
+        resp = requests.post(
+            "https://catbox.moe/user/api.php",
+            data={"reqtype": "fileupload"},
+            files={"fileToUpload": (src_path.name, f, "application/octet-stream")},
+            timeout=25,
+        )
+    if resp.status_code != 200:
+        return ""
+    return str(resp.text or "").strip()
+
+
+def _attach_openclaw_media_blocks(payload: dict[str, Any], paths: list[str]) -> dict[str, Any]:
+    valid = _to_public_media_paths(paths)
+    if not valid:
+        return payload
+    content = [{"type": "text", "text": "\n".join([f"MEDIA: {p}" for p in valid])}]
+    content.extend({"type": "image"} for _ in valid)
+    payload["content"] = content
+    payload["details"] = {"path": valid[0]}
+    return payload
 
 
 def _build_llm_caller(config: dict[str, Any]):
@@ -193,8 +293,9 @@ def _start_douyin_login(config_path: str | None, timeout_seconds: int = 180) -> 
             "session_id": session_id,
             "error": str(payload.get("message") or "生成二维码失败"),
         }
+    media = _build_media_payload([str(payload.get("qr_path") or ""), str(payload.get("debug_path") or "")])
 
-    return {
+    payload_resp = {
         "status": "qrcode_ready",
         "completed": True,
         "success": True,
@@ -205,8 +306,16 @@ def _start_douyin_login(config_path: str | None, timeout_seconds: int = 180) -> 
         "page_url": str(payload.get("page_url") or ""),
         "page_title": str(payload.get("page_title") or ""),
         "qr_mode": str(payload.get("qr_mode") or ""),
-        "message": "请将 qr_path 对应图片发给用户扫码，然后调用 douyin_login_poll",
+        "message": (
+            "请将二维码发给用户扫码，然后调用 douyin_login_poll\n"
+            + (media.get("media_message") or "")
+        ).strip(),
+        **media,
     }
+    return _attach_openclaw_media_blocks(
+        payload_resp,
+        media.get("media_paths") or [],
+    )
 
 
 def _poll_douyin_login(session_id: str, config_path: str | None) -> dict[str, Any]:
@@ -270,17 +379,26 @@ def _poll_douyin_login(session_id: str, config_path: str | None) -> dict[str, An
             "debug_path": str(payload.get("debug_path") or ""),
         }
 
-    return {
+    media = _build_media_payload([str(payload.get("qr_path") or ""), str(payload.get("debug_path") or "")])
+    payload_resp = {
         "status": "waiting",
         "completed": True,
         "success": True,
         "action": "douyin_login_poll",
         "session_id": session_id,
         "login_status": status or "waiting",
-        "message": str(payload.get("message") or "等待扫码确认"),
+        "message": (
+            str(payload.get("message") or "等待扫码确认")
+            + ("\n" + media.get("media_message") if media.get("media_message") else "")
+        ).strip(),
         "qr_path": str(payload.get("qr_path") or ""),
         "debug_path": str(payload.get("debug_path") or ""),
+        **media,
     }
+    return _attach_openclaw_media_blocks(
+        payload_resp,
+        media.get("media_paths") or [],
+    )
 
 
 def _start_bilibili_login() -> dict[str, Any]:
@@ -327,8 +445,9 @@ def _start_bilibili_login() -> dict[str, Any]:
         "updated_at": int(time.time()),
     }
     session_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    media = _build_media_payload([str(qr_path)])
 
-    return {
+    payload_resp = {
         "status": "qrcode_ready",
         "completed": True,
         "success": True,
@@ -336,7 +455,68 @@ def _start_bilibili_login() -> dict[str, Any]:
         "session_id": session_id,
         "qr_path": str(qr_path),
         "qrcode_url": qrcode_url,
-        "message": "请将 qr_path 对应图片发给用户扫码，然后调用 bili_login_poll",
+        "message": (
+            "请将二维码发给用户扫码，然后调用 bili_login_poll\n"
+            + (media.get("media_message") or "")
+        ).strip(),
+        **media,
+    }
+    return _attach_openclaw_media_blocks(payload_resp, media.get("media_paths") or [])
+
+
+def _start_bilibili_login_link() -> dict[str, Any]:
+    """仅返回可点击登录链接（不依赖图片发送）。"""
+    async def _gen():
+        bili = BilibiliLogin(str(DATA_DIR))
+        return await bili.generate_qrcode()
+
+    qr_data = asyncio.run(_gen())
+    if not qr_data:
+        return {
+            "status": "failed",
+            "completed": True,
+            "success": False,
+            "action": "bili_login_link",
+            "error": "B站登录链接生成失败",
+        }
+
+    qrcode_url = str(qr_data.get("url") or "")
+    qrcode_key = str(qr_data.get("qrcode_key") or "")
+    if not qrcode_url or not qrcode_key:
+        return {
+            "status": "failed",
+            "completed": True,
+            "success": False,
+            "action": "bili_login_link",
+            "error": "B站登录链接数据不完整",
+        }
+
+    BILI_LOGIN_DIR.mkdir(parents=True, exist_ok=True)
+    session_id = uuid.uuid4().hex
+    session_file = BILI_LOGIN_DIR / f"{session_id}.json"
+    session_file.write_text(
+        json.dumps(
+            {
+                "session_id": session_id,
+                "status": "qrcode_ready",
+                "qrcode_key": qrcode_key,
+                "qrcode_url": qrcode_url,
+                "created_at": int(time.time()),
+                "updated_at": int(time.time()),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "status": "qrcode_ready",
+        "completed": True,
+        "success": True,
+        "action": "bili_login_link",
+        "session_id": session_id,
+        "qrcode_url": qrcode_url,
+        "message": "请在手机打开 qrcode_url 完成登录，然后调用 bili_login_poll",
     }
 
 
@@ -407,16 +587,22 @@ def _poll_bilibili_login(session_id: str) -> dict[str, Any]:
             "error": "二维码已过期，请重新获取" if status == "expired" else "登录失败",
             "qr_path": str(payload.get("qr_path") or ""),
         }
-    return {
+    media = _build_media_payload([str(payload.get("qr_path") or "")])
+    payload_resp = {
         "status": "waiting",
         "completed": True,
         "success": True,
         "action": "bili_login_poll",
         "session_id": session_id,
         "login_status": status or "waiting",
-        "message": "等待扫码确认",
+        "message": (
+            "等待扫码确认"
+            + ("\n" + media.get("media_message") if media.get("media_message") else "")
+        ).strip(),
         "qr_path": str(payload.get("qr_path") or ""),
+        **media,
     }
+    return _attach_openclaw_media_blocks(payload_resp, media.get("media_paths") or [])
 
 
 async def _run_async(
@@ -468,36 +654,72 @@ async def _run_async(
         if rendered and os.path.exists(rendered):
             note_image = str(rendered)
 
+    # 飞书发布为必做项
+    pusher = FeishuWikiPusher(
+        app_id=str(config.get("feishu_app_id", "")),
+        app_secret=str(config.get("feishu_app_secret", "")),
+        space_id=str(config.get("feishu_wiki_space_id", "")),
+        parent_node_token=str(config.get("feishu_parent_node_token", "")),
+        title_prefix=str(config.get("feishu_title_prefix", "VideoAnalyzer纪要")),
+        domain=str(config.get("feishu_domain", "feishu")),
+    )
+    if not pusher.is_config_ready():
+        return {
+            "status": "failed",
+            "completed": True,
+            "success": False,
+            "error": "飞书发布为必做项，但飞书配置不完整（缺少 app_id/app_secret/space_id）",
+            "url": url,
+        }
+
+    ok, message, detail = await pusher.push_note(
+        note_text=note_text,
+        video_url=url,
+        screenshot_paths=screenshot_paths,
+        mindmap_mermaid=mindmap_mermaid,
+    )
     feishu_result = {
-        "attempted": False,
-        "success": False,
-        "message": "",
-        "detail": {},
+        "attempted": True,
+        "success": bool(ok),
+        "message": str(message or ""),
+        "detail": detail or {},
     }
-    if bool(config.get("enable_feishu_wiki_push", True)) and bool(
-        config.get("feishu_push_on_manual", True)
-    ):
-        pusher = FeishuWikiPusher(
-            app_id=str(config.get("feishu_app_id", "")),
-            app_secret=str(config.get("feishu_app_secret", "")),
-            space_id=str(config.get("feishu_wiki_space_id", "")),
-            parent_node_token=str(config.get("feishu_parent_node_token", "")),
-            title_prefix=str(config.get("feishu_title_prefix", "VideoAnalyzer纪要")),
-            domain=str(config.get("feishu_domain", "feishu")),
-        )
-        feishu_result["attempted"] = True
-        ok, message, detail = await pusher.push_note(
-            note_text=note_text,
-            video_url=url,
-            screenshot_paths=screenshot_paths,
-            mindmap_mermaid=mindmap_mermaid,
-        )
-        feishu_result["success"] = bool(ok)
-        feishu_result["message"] = str(message or "")
-        feishu_result["detail"] = detail or {}
+    if not ok:
+        return {
+            "status": "failed",
+            "completed": True,
+            "success": False,
+            "error": f"飞书发布失败: {message}",
+            "url": url,
+            "feishu_publish": feishu_result,
+        }
+
+    feishu_doc_url = str((detail or {}).get("doc_url") or "")
+    card_title = str((detail or {}).get("title") or "视频总结已完成")
+    feishu_interactive_card = {
+        "config": {"wide_screen_mode": True},
+        "header": {
+            "template": "blue",
+            "title": {"tag": "plain_text", "content": card_title},
+        },
+        "elements": [
+            {"tag": "div", "text": {"tag": "lark_md", "content": "✅ 视频总结已生成并发布到飞书知识库"}},
+            {
+                "tag": "action",
+                "actions": [
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "打开飞书知识库文档"},
+                        "type": "primary",
+                        "url": feishu_doc_url or "https://open.feishu.cn/",
+                    }
+                ],
+            },
+        ],
+    }
 
     elapsed = round(time.time() - start, 3)
-    return {
+    payload_resp = {
         "status": "completed",
         "completed": True,
         "success": True,
@@ -511,7 +733,12 @@ async def _run_async(
             "mindmap_mermaid": mindmap_mermaid,
         },
         "feishu_publish": feishu_result,
+        "feishu_doc_url": feishu_doc_url,
+        "notify_message": f"✅ 视频总结完成，已发布飞书知识库：{feishu_doc_url}",
+        "feishu_interactive_card": feishu_interactive_card,
+        **_build_media_payload([note_image] if note_image else []),
     }
+    return _attach_openclaw_media_blocks(payload_resp, [note_image] if note_image else [])
 
 
 def skill_main(
@@ -545,6 +772,8 @@ def skill_main(
         return _poll_douyin_login(session_id=sid, config_path=config_path)
     if action == "bili_login_start":
         return _start_bilibili_login()
+    if action == "bili_login_link":
+        return _start_bilibili_login_link()
     if action == "bili_login_poll":
         sid = str(session_id or "").strip()
         if not sid:

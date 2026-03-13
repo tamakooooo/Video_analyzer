@@ -15,7 +15,8 @@ metadata: { "openclaw": { "emoji": "🎥", "requires": { "anyBins": ["python3", 
 - B站二维码登录（返回二维码图片路径，便于上层发送给用户）
 - 抖音二维码登录（返回二维码图片路径，便于上层发送给用户）
 - 必剪转写兜底
-- 飞书知识库发布（默认开启）
+- 飞书知识库发布（必做）
+- 完成后返回飞书互动卡片（包含“打开飞书知识库文档”按钮）
 - 总结图片渲染
 
 ## 何时使用
@@ -67,6 +68,11 @@ python3 {baseDir}/run.py --action douyin_login_poll --session-id "<SESSION_ID>" 
 
 当返回 `login_status=success` 时，Cookie 已自动写入 `config.json`，可直接用于抖音总结。
 
+### 发送二维码图片（关键规则）
+
+当 `douyin_login_start` / `douyin_login_poll` 返回里包含 `media_message` 时，**必须原样输出该行**（例如 `MEDIA: /abs/path/to/qr.png`），不要改写、不要省略。  
+OpenClaw 依赖该 token 自动发送图片。
+
 ## B站二维码登录（给用户发图）
 
 ### 第一步：生成二维码
@@ -87,10 +93,29 @@ python3 {baseDir}/run.py --action bili_login_poll --session-id "<SESSION_ID>"
 
 当返回 `login_status=success` 时，Cookie 已自动写入 `data/bili_cookies.json`，后续 B站总结会自动使用。
 
+## B站登录链接模式（不依赖图片发送）
+
+当通道无法发送图片时，优先使用：
+
+```bash
+python3 {baseDir}/run.py --action bili_login_link
+```
+
+返回 `qrcode_url`，在手机浏览器打开后按提示在 B站 App 内确认登录，再调用：
+
+```bash
+python3 {baseDir}/run.py --action bili_login_poll --session-id "<SESSION_ID>"
+```
+
+### 发送二维码图片（关键规则）
+
+当 `bili_login_start` / `bili_login_poll` 返回里包含 `media_message` 时，**必须原样输出该行**（例如 `MEDIA: /abs/path/to/qr.png`），不要改写、不要省略。  
+OpenClaw 依赖该 token 自动发送图片。
+
 ## 参数说明（最常用）
 
 - `url`：必填，B站/抖音视频链接
-- `action`：`summarize|douyin_login_start|douyin_login_poll|bili_login_start|bili_login_poll`
+- `action`：`summarize|douyin_login_start|douyin_login_poll|bili_login_start|bili_login_link|bili_login_poll`
 - `--config`：配置文件路径，默认 `./config.json`
 - `--session-id`：轮询抖音登录状态时必填
 - `--note-style`：`concise|detailed|professional`
@@ -119,6 +144,9 @@ python3 {baseDir}/run.py --action douyin_login_poll --session-id "<SESSION_ID>"
 # B站登录：获取二维码（把 qr_path 图片发给用户）
 python3 {baseDir}/run.py --action bili_login_start
 
+# B站登录：链接模式（通道不支持发图时使用）
+python3 {baseDir}/run.py --action bili_login_link
+
 # B站登录：轮询状态（登录后会写入 data/bili_cookies.json）
 python3 {baseDir}/run.py --action bili_login_poll --session-id "<SESSION_ID>"
 ```
@@ -139,6 +167,8 @@ python3 {baseDir}/run.py --action bili_login_poll --session-id "<SESSION_ID>"
 - `feishu_parent_node_token`（可选）
 - `feishu_domain`（`feishu` 或 `lark`）
 
+> 注意：飞书发布为必做项，不再询问是否发布；若飞书配置不完整会直接报错失败。
+
 3) 抖音支持（抖音链接时）
 - `douyin_downloader_runner_path`（推荐 `/opt/douyin-downloader/run.py`）
 - `douyin_downloader_python`（如 `/mnt/AstrBot/.venv/bin/python`）
@@ -151,6 +181,8 @@ python3 {baseDir}/run.py --action bili_login_poll --session-id "<SESSION_ID>"
 - `note_text`：总结正文（Markdown）
 - `note_image`：图片路径（若开启渲染）
 - `feishu_publish`：飞书发布结果
+- `feishu_doc_url`：飞书知识库文档链接
+- `feishu_interactive_card`：飞书互动卡片 JSON（含跳转按钮）
 - `error`：失败原因
 
 ## 故障排查

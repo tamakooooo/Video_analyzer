@@ -23,7 +23,7 @@ parameters:
     type: choice
     required: false
     default: summarize
-    options: [summarize, douyin_login_start, douyin_login_poll, bili_login_start, bili_login_poll]
+    options: [summarize, douyin_login_start, douyin_login_poll, bili_login_start, bili_login_link, bili_login_poll]
     description: 执行动作（默认 summarize）
 
   url:
@@ -83,12 +83,12 @@ parameters:
   enable_feishu_wiki_push:
     type: boolean
     default: true
-    description: 是否发布飞书知识库
+    description: 兼容参数（已固定为 true，飞书发布为必做项）
 
   feishu_push_on_manual:
     type: boolean
     default: true
-    description: 手动触发时是否发布飞书（OpenClaw 调用建议保持 true）
+    description: 兼容参数（已固定为 true，手动触发必发布）
 
   douyin_downloader_runner_path:
     type: string
@@ -133,4 +133,7 @@ output:
       success: boolean
       message: string
       detail: object
+    feishu_doc_url: string
+    notify_message: string
+    feishu_interactive_card: object
     error: string

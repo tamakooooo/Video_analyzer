@@ -26,6 +26,7 @@ def main() -> int:
             "douyin_login_start",
             "douyin_login_poll",
             "bili_login_start",
+            "bili_login_link",
             "bili_login_poll",
         ],
         help="执行动作：总结 / 抖音登录开始 / 抖音登录轮询",
@@ -50,7 +51,7 @@ def main() -> int:
     parser.add_argument("--no-output-image", action="store_true", help="禁用总结图片渲染")
     parser.add_argument("--no-enable-link", action="store_true", help="禁用时间戳跳转标记")
     parser.add_argument("--no-enable-summary", action="store_true", help="禁用 AI 总结段")
-    parser.add_argument("--no-feishu", action="store_true", help="禁用飞书知识库发布")
+    parser.add_argument("--no-feishu", action="store_true", help="兼容参数（已忽略，飞书发布为必做项）")
     parser.add_argument(
         "--douyin-runner-path",
         default=None,
@@ -76,11 +77,22 @@ def main() -> int:
         enable_summary=not args.no_enable_summary,
         download_quality=args.download_quality,
         max_note_length=args.max_note_length,
-        enable_feishu_wiki_push=not args.no_feishu,
-        feishu_push_on_manual=not args.no_feishu,
+        # 飞书发布是必做项，此参数保留仅为兼容旧调用
+        enable_feishu_wiki_push=True,
+        feishu_push_on_manual=True,
         douyin_downloader_runner_path=args.douyin_runner_path,
         douyin_downloader_python=args.douyin_python,
     )
+
+    # OpenClaw 媒体发送约定：stdout 中输出以 "MEDIA:" 开头的独立行
+    # 注意：必须是独立行，不能放在 JSON 字符串里。
+    media_tokens = result.get("media_tokens") or []
+    if isinstance(media_tokens, list):
+        for token in media_tokens:
+            token = str(token or "").strip()
+            if token.startswith("MEDIA:"):
+                print(token)
+
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result.get("success") else 1
 
