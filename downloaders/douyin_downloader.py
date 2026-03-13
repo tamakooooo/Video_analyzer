@@ -8,7 +8,7 @@ from typing import Optional
 from astrbot.api import logger
 
 from .base import Downloader
-from ..models.audio_model import AudioDownloadResult
+from models.audio_model import AudioDownloadResult
 
 
 class DouyinDownloader(Downloader):

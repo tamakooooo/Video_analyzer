@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
 
-from ..models.audio_model import AudioDownloadResult
-from ..models.transcriber_model import TranscriptResult
+from models.audio_model import AudioDownloadResult
+from models.transcriber_model import TranscriptResult
 
 
 QUALITY_MAP = {

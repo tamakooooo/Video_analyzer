@@ -5,7 +5,7 @@ from typing import Optional, List
 
 import requests
 
-from ..models.transcriber_model import TranscriptSegment, TranscriptResult
+from models.transcriber_model import TranscriptSegment, TranscriptResult
 
 logger = logging.getLogger(__name__)
 

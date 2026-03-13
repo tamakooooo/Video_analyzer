@@ -7,8 +7,8 @@ import yt_dlp
 
 from astrbot.api import logger
 
-from ..models.audio_model import AudioDownloadResult
-from ..models.transcriber_model import TranscriptResult, TranscriptSegment
+from models.audio_model import AudioDownloadResult
+from models.transcriber_model import TranscriptResult, TranscriptSegment
 from .base import QUALITY_MAP, Downloader
 
 
@@ -95,7 +95,8 @@ class BilibiliDownloader(Downloader):
         output_path = os.path.join(output_dir, "%(id)s_video.%(ext)s")
 
         ydl_opts = {
-            "format": "bestvideo*+bestaudio/best",
+            # 720P 优先，显著降低体积与超时概率；无 720P 时自动回退
+            "format": "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
             "outtmpl": output_path,
             "noplaylist": True,
             "quiet": True,

@@ -4,7 +4,7 @@ from typing import Optional, List, Dict
 import aiohttp
 
 from astrbot.api import logger
-from ..utils.wbi_sign import sign_wbi_params
+from utils.wbi_sign import sign_wbi_params
 
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=10)
 

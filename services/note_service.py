@@ -6,13 +6,13 @@ from typing import Any
 
 from astrbot.api import logger
 
-from ..downloaders.bilibili_downloader import BilibiliDownloader
-from ..downloaders.douyin_downloader import DouyinDownloader
-from ..gpt.mindmap_prompt import MINDMAP_PROMPT_TEMPLATE
-from ..gpt.prompt_builder import build_prompt
-from ..transcriber.bcut import BcutTranscriber
-from ..utils.note_helper import replace_content_markers
-from ..utils.url_parser import detect_platform, extract_video_id
+from downloaders.bilibili_downloader import BilibiliDownloader
+from downloaders.douyin_downloader import DouyinDownloader
+from gpt.mindmap_prompt import MINDMAP_PROMPT_TEMPLATE
+from gpt.prompt_builder import build_prompt
+from transcriber.bcut import BcutTranscriber
+from utils.note_helper import replace_content_markers
+from utils.url_parser import detect_platform, extract_video_id
 from .screenshot_extractor import ScreenshotExtractor
 
 

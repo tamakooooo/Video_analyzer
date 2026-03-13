@@ -1,5 +1,5 @@
 from .prompt import BASE_PROMPT, LINK, AI_SUM
-from ..models.transcriber_model import TranscriptSegment
+from models.transcriber_model import TranscriptSegment
 from datetime import timedelta
 from typing import List, Optional
 
