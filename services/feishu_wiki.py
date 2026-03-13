@@ -19,7 +19,7 @@ class FeishuWikiPusher:
         app_secret: str,
         space_id: str,
         parent_node_token: str = "",
-        title_prefix: str = "BiliBrief纪要",
+        title_prefix: str = "VideoAnalyzer纪要",
         domain: str = "feishu",
         timeout_seconds: int = 20,
     ):
@@ -27,7 +27,7 @@ class FeishuWikiPusher:
         self.app_secret = (app_secret or "").strip()
         self.space_id = (space_id or "").strip()
         self.parent_node_token = (parent_node_token or "").strip()
-        self.title_prefix = (title_prefix or "BiliBrief纪要").strip()
+        self.title_prefix = (title_prefix or "VideoAnalyzer纪要").strip()
         self.domain = (domain or "feishu").strip().lower()
         self._timeout = aiohttp.ClientTimeout(total=timeout_seconds)
 

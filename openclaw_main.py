@@ -1,5 +1,5 @@
 """
-OpenClaw 入口：复用 astrbot_plugin_video_analyzer 的核心能力。
+OpenClaw 入口：复用 Video Analyzer 的核心能力。
 """
 
 from __future__ import annotations

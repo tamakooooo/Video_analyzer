@@ -1,7 +1,7 @@
 """
-BiliBrief 视频纪要插件
+Video Analyzer 视频分析插件
 
-订阅 B站 UP主，定时/手动生成 AI 视频纪要并推送到聊天
+订阅 B站/抖音创作者，定时/手动生成 AI 视频总结并推送到聊天
 """
 
 import asyncio
@@ -24,14 +24,14 @@ from .utils.md_to_image import render_note_image
 from .utils.url_parser import detect_platform, extract_bilibili_mid
 
 
-class BiliBriefPlugin(Star):
-    """BiliBrief 视频纪要插件"""
+class VideoAnalyzerPlugin(Star):
+    """Video Analyzer 视频分析插件"""
 
     def __init__(self, context: Context):
         super().__init__(context)
 
         # 数据目录（使用框架规范 API）
-        self.data_dir = str(StarTools.get_data_dir("astrbot_plugin_bilibrief"))
+        self.data_dir = str(StarTools.get_data_dir("astrbot_plugin_video_analyzer"))
         os.makedirs(self.data_dir, exist_ok=True)
         os.makedirs(os.path.join(self.data_dir, "images"), exist_ok=True)
 
@@ -42,9 +42,9 @@ class BiliBriefPlugin(Star):
         # Debug 模式 —— 在其他所有初始化之前设置
         self._debug_mode = bool(self.config.get("debug_mode", False))
         if self._debug_mode:
-            logger.info("═══════════ [BiliBrief] Debug 模式已启用 ═══════════")
+            logger.info("═══════════ [VideoAnalyzer] Debug 模式已启用 ═══════════")
 
-        self._log("══════ [BiliBrief] 插件初始化开始 ══════")
+        self._log("══════ [VideoAnalyzer] 插件初始化开始 ══════")
         self._log(
             f"配置内容: { {k: v for k, v in self.config.items() if k not in ('cookies',)} }"
         )
@@ -73,7 +73,7 @@ class BiliBriefPlugin(Star):
             app_secret=str(self.config.get("feishu_app_secret", "")),
             space_id=str(self.config.get("feishu_wiki_space_id", "")),
             parent_node_token=str(self.config.get("feishu_parent_node_token", "")),
-            title_prefix=str(self.config.get("feishu_title_prefix", "BiliBrief纪要")),
+            title_prefix=str(self.config.get("feishu_title_prefix", "VideoAnalyzer纪要")),
             domain=str(self.config.get("feishu_domain", "feishu")),
         )
         self._last_feishu_publish_result = {}
@@ -94,19 +94,19 @@ class BiliBriefPlugin(Star):
         else:
             self._log("定时推送已禁用")
 
-        self._log("══════ [BiliBrief] 插件初始化完成 ══════")
+        self._log("══════ [VideoAnalyzer] 插件初始化完成 ══════")
 
         if self.bili_login.is_logged_in():
-            logger.info("BiliBrief 插件已加载（B站已登录）")
+            logger.info("Video Analyzer 插件已加载（B站已登录）")
         else:
-            logger.info("BiliBrief 插件已加载（B站未登录，请发送 /B站登录 扫码）")
+            logger.info("Video Analyzer 插件已加载（B站未登录，请发送 /B站登录 扫码）")
 
     # ==================== 工具方法 ====================
 
     def _log(self, msg: str):
         """Debug 日志输出 —— 使用 logger.info 确保始终可见"""
         if self._debug_mode:
-            logger.info(f"[BiliBrief/DBG] {msg}")
+            logger.info(f"[VideoAnalyzer/DBG] {msg}")
 
     def _load_push_targets_from_config(self):
         """从配置文件加载推送目标到 SubscriptionManager"""
@@ -138,7 +138,7 @@ class BiliBriefPlugin(Star):
             return
 
         cfg_candidates = [
-            Path("/mnt/AstrBot/data/config/astrbot_plugin_bilibrief_config.json"),
+            Path("/mnt/AstrBot/data/config/astrbot_plugin_video_analyzer_config.json"),
             Path("/mnt/AstrBot/data/config/astrbot_plugin_video_analyzer_config.json"),
         ]
         cfg_path = next((p for p in cfg_candidates if p.exists()), None)
@@ -348,12 +348,12 @@ class BiliBriefPlugin(Star):
 
     # ==================== 命令处理 ====================
 
-    @filter.command("总结帮助", alias={"BiliBrief help", "总结help", "总结帮助"})
+    @filter.command("总结帮助", alias={"VideoAnalyzer help", "BiliBrief help", "总结help", "总结帮助"})
     async def show_help(self, event: AstrMessageEvent):
         """显示插件帮助信息"""
         login_status = "✅ 已登录" if self.bili_login.is_logged_in() else "❌ 未登录"
         help_text = (
-            "📝 BiliBrief 视频纪要助手 v1.0.1\n"
+            "📝 Video Analyzer 视频总结助手 v1.1.0\n"
             "━━━━━━━━━━━━━━━━━━━\n"
             f"🔐 B站登录状态: {login_status}\n"
             "\n"
@@ -362,7 +362,7 @@ class BiliBriefPlugin(Star):
             "  /B站登出 → 退出B站登录\n"
             "\n"
             "📌 基本命令:\n"
-            "  /总结 <B站视频链接或BV号>\n"
+            "  /总结 <B站/抖音视频链接或BV号>\n"
             "    → 为指定视频生成AI总结\n"
             "  /最新视频 <UP主UID、空间链接或昵称>\n"
             "    → 获取UP主最新视频并生成总结\n"
@@ -492,7 +492,7 @@ class BiliBriefPlugin(Star):
         self.bili_cookies = {}
         yield event.plain_result("✅ 已退出B站登录")
 
-    @filter.command("总结", alias={"BiliBrief", "视频总结", "总结"})
+    @filter.command("总结", alias={"VideoAnalyzer", "BiliBrief", "视频总结", "总结"})
     async def generate_note_cmd(self, event: AstrMessageEvent):
         """手动为视频生成总结"""
         self._log("═══════ [总结命令] 开始处理 ═══════")
@@ -1104,7 +1104,7 @@ class BiliBriefPlugin(Star):
 
             response = await provider.text_chat(
                 prompt=prompt,
-                session_id="BiliBrief_plugin",
+                session_id="VideoAnalyzer_plugin",
             )
             self._log(f"[AskLLM] response type={type(response).__name__}")
 
@@ -1223,4 +1223,4 @@ class BiliBriefPlugin(Star):
             except asyncio.CancelledError:
                 pass
 
-        logger.info("BiliBrief 视频纪要插件已卸载")
+        logger.info("Video Analyzer 视频分析插件已卸载")

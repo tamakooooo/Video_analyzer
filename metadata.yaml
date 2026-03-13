@@ -1,6 +1,6 @@
-name: astrbot_plugin_bilibrief
-display_name: BiliBrief 视频纪要
-desc: B站视频AI纪要与UP主订阅推送，支持飞书知识库发布
-version: v1.0.1
-author: storyAura
-repo: https://github.com/tamakooooo/astrbot_plugin_Video_analyzer
+name: astrbot_plugin_video_analyzer
+display_name: Video Analyzer 视频分析
+desc: B站/抖音视频AI总结与发布，支持飞书知识库与互动卡片
+version: v1.1.0
+author: tamakooooo
+repo: https://github.com/tamakooooo/Video_analyzer
