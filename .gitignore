@@ -19,6 +19,8 @@ build/
 data/
 *.json
 !_conf_schema.json
+!config.example.json
+!skill.yaml
 
 # B站登录 Cookie (绝对不要上传!)
 bili_cookies.json
@@ -47,3 +49,6 @@ desktop.ini
 # 虚拟环境
 venv/
 .env/
+
+# 日志
+logs/

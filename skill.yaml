@@ -1,0 +1,111 @@
+name: video-analyzer
+version: 1.1.0
+description: 分析 B站/抖音视频，生成结构化总结，并可同步发布到飞书知识库。
+author: tamakooooo
+type: utility
+
+triggers:
+  - "分析视频"
+  - "总结视频"
+  - "b站总结"
+  - "抖音总结"
+  - "发布到飞书知识库"
+
+capabilities:
+  - bilibili_video_summary
+  - douyin_video_summary
+  - bcut_transcribe
+  - feishu_wiki_publish
+  - note_image_render
+
+parameters:
+  url:
+    type: string
+    required: true
+    description: 视频链接（支持 B站/抖音）
+
+  config_path:
+    type: string
+    required: false
+    default: "./config.json"
+    description: 配置文件路径（相对路径基于 skill 目录）
+
+  note_style:
+    type: choice
+    default: professional
+    options: [concise, detailed, professional]
+    description: 总结风格
+
+  download_quality:
+    type: choice
+    default: fast
+    options: [fast, medium, slow]
+    description: 下载音频质量
+
+  output_image:
+    type: boolean
+    default: true
+    description: 是否输出总结图片
+
+  enable_link:
+    type: boolean
+    default: true
+    description: 是否保留时间戳跳转标记
+
+  enable_summary:
+    type: boolean
+    default: true
+    description: 是否在文末增加 AI 总结段
+
+  max_note_length:
+    type: integer
+    default: 3000
+    description: 总结最大字符数
+
+  enable_feishu_wiki_push:
+    type: boolean
+    default: true
+    description: 是否发布飞书知识库
+
+  feishu_push_on_manual:
+    type: boolean
+    default: true
+    description: 手动触发时是否发布飞书（OpenClaw 调用建议保持 true）
+
+  douyin_downloader_runner_path:
+    type: string
+    required: false
+    description: douyin-downloader 的 run.py 绝对路径
+
+  douyin_downloader_python:
+    type: string
+    required: false
+    description: 执行 douyin-downloader 的 Python 路径
+
+output:
+  format: structured
+  contract:
+    - status
+    - completed
+    - success
+    - note_text
+    - feishu_publish
+  schema:
+    status: string
+    completed: boolean
+    success: boolean
+    platform: string
+    url: string
+    processing_seconds: number
+    note_text: string
+    note_image: string
+    artifacts:
+      screenshot_paths: array
+      mindmap_mermaid: string
+    feishu_publish:
+      attempted: boolean
+      success: boolean
+      message: string
+      detail: object
+    error: string
+

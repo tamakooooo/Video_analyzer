@@ -1,0 +1,29 @@
+{
+  "llm": {
+    "api_key": "sk-xxx",
+    "base_url": "https://api.openai.com/v1",
+    "model": "gpt-4o-mini"
+  },
+  "output_image": true,
+  "note_style": "professional",
+  "enable_link": true,
+  "enable_summary": true,
+  "download_quality": "fast",
+  "max_note_length": 3000,
+  "enable_feishu_wiki_push": true,
+  "feishu_push_on_manual": true,
+  "feishu_app_id": "",
+  "feishu_app_secret": "",
+  "feishu_wiki_space_id": "",
+  "feishu_parent_node_token": "",
+  "feishu_title_prefix": "VideoAnalyzer纪要",
+  "feishu_domain": "feishu",
+  "douyin_downloader_runner_path": "/opt/douyin-downloader/run.py",
+  "douyin_downloader_python": "/mnt/AstrBot/.venv/bin/python",
+  "douyin_cookie_ttwid": "",
+  "douyin_cookie_odin_tt": "",
+  "douyin_cookie_ms_token": "",
+  "douyin_cookie_passport_csrf_token": "",
+  "douyin_cookie_sid_guard": ""
+}
+
