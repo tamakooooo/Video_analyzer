@@ -283,6 +283,144 @@ class VideoAnalyzerPlugin(Star):
             self._log("[Render] 图片渲染失败, 回退到纯文本")
             return note_text or "❌ 总结为空"
 
+    def _build_feishu_interactive_card(
+        self,
+        doc_url: str,
+        note_text: str,
+        video_url: str,
+    ) -> dict:
+        """构造飞书互动卡片 JSON。"""
+        summary = self._strip_markdown_for_card(note_text or "")
+        concise = self._build_concise_summary(summary)
+        return {
+            "config": {"wide_screen_mode": True},
+            "header": {
+                "template": "blue",
+                "title": {"tag": "plain_text", "content": "视频总结已完成"},
+            },
+            "elements": [
+                {
+                    "tag": "div",
+                    "text": {
+                        "tag": "plain_text",
+                        "content": "发布状态：已发布到飞书知识库",
+                    },
+                },
+                {"tag": "hr"},
+                {
+                    "tag": "div",
+                    "text": {
+                        "tag": "plain_text",
+                        "content": f"精简总结\n{concise or '（总结内容为空）'}",
+                    },
+                },
+                {
+                    "tag": "action",
+                    "actions": [
+                        {
+                            "tag": "button",
+                            "text": {
+                                "tag": "plain_text",
+                                "content": "打开飞书知识库文档",
+                            },
+                            "type": "primary",
+                            "url": doc_url,
+                        },
+                        {
+                            "tag": "button",
+                            "text": {
+                                "tag": "plain_text",
+                                "content": "复制视频链接",
+                            },
+                            "type": "default",
+                            "url": video_url or doc_url,
+                        }
+                    ],
+                },
+            ],
+        }
+
+    @staticmethod
+    def _strip_markdown_for_card(text: str) -> str:
+        """把 Markdown 摘要转为适合卡片 plain_text 的文本。"""
+        import re
+
+        s = str(text or "")
+        s = re.sub(r"```[\s\S]*?```", "", s)  # 去代码块
+        s = re.sub(r"`([^`]*)`", r"\1", s)  # 行内代码
+        s = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", s)  # 图片
+        s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1", s)  # 链接文本
+        s = re.sub(r"^#{1,6}\s*", "", s, flags=re.MULTILINE)  # 标题#
+        s = re.sub(r"^\s*[-*+]\s+", "", s, flags=re.MULTILINE)  # 列表符
+        s = re.sub(r"^\s*\d+\.\s+", "", s, flags=re.MULTILINE)  # 有序列表
+        s = s.replace("**", "").replace("__", "").replace("*", "")
+        s = re.sub(r"\n{3,}", "\n\n", s).strip()
+        return s
+
+    @staticmethod
+    def _build_concise_summary(text: str) -> str:
+        """提取卡片内展示的精简总结。"""
+        lines = [ln.strip() for ln in str(text or "").splitlines() if ln.strip()]
+        if not lines:
+            return ""
+        picked = lines[:3]
+        concise = "；".join(picked)
+        if len(concise) > 160:
+            concise = concise[:160] + "…"
+        return concise
+
+    async def _try_send_feishu_card_reply(
+        self,
+        event: AstrMessageEvent,
+        doc_url: str,
+        note_text: str,
+        video_url: str,
+    ) -> bool:
+        """
+        在飞书平台直接发送互动卡片（reply）。
+        优先走平台原生 API，失败时由上层降级为 Json/Plain。
+        """
+        if not doc_url:
+            return False
+
+        platform_name = str(event.get_platform_name() or "").lower()
+        if platform_name not in {"lark", "feishu"}:
+            return False
+
+        try:
+            bot = getattr(event, "bot", None)
+            msg_obj = getattr(event, "message_obj", None)
+            message_id = getattr(msg_obj, "message_id", "")
+            if not bot or not getattr(bot, "im", None) or not message_id:
+                return False
+
+            from lark_oapi.api.im.v1 import ReplyMessageRequest, ReplyMessageRequestBody
+
+            card = self._build_feishu_interactive_card(doc_url, note_text, video_url)
+            request = (
+                ReplyMessageRequest.builder()
+                .message_id(message_id)
+                .request_body(
+                    ReplyMessageRequestBody.builder()
+                    .content(json.dumps(card, ensure_ascii=False))
+                    .msg_type("interactive")
+                    .uuid(str(uuid.uuid4()))
+                    .reply_in_thread(False)
+                    .build()
+                )
+                .build()
+            )
+            resp = await bot.im.v1.message.areply(request)
+            if not resp.success():
+                logger.warning(
+                    f"[FeishuCard] 互动卡片发送失败({resp.code}): {resp.msg}",
+                )
+                return False
+            return True
+        except Exception as e:
+            logger.warning(f"[FeishuCard] 互动卡片发送异常: {e}")
+            return False
+
     async def _try_push_note_to_feishu(
         self,
         note_text: str,
@@ -638,9 +776,11 @@ class VideoAnalyzerPlugin(Star):
             if feishu_result.get("success"):
                 doc_url = (feishu_result.get("detail") or {}).get("doc_url", "")
                 if doc_url:
-                    yield event.plain_result(f"📚 飞书发布成功：{doc_url}")
-                else:
-                    yield event.plain_result("📚 飞书发布成功")
+                    sent = await self._try_send_feishu_card_reply(
+                        event, doc_url, note, video_url
+                    )
+                    if not sent:
+                        yield event.plain_result(f"🔗 打开飞书文档：{doc_url}")
             else:
                 yield event.plain_result(
                     f"⚠️ 飞书发布失败：{feishu_result.get('message', '未知错误')}"
@@ -710,7 +850,11 @@ class VideoAnalyzerPlugin(Star):
         if feishu_result.get("attempted") and feishu_result.get("success"):
             doc_url = (feishu_result.get("detail") or {}).get("doc_url", "")
             if doc_url:
-                yield event.plain_result(f"📚 飞书发布成功：{doc_url}")
+                sent = await self._try_send_feishu_card_reply(
+                    event, doc_url, note, video_url
+                )
+                if not sent:
+                    yield event.plain_result(f"🔗 打开飞书文档：{doc_url}")
         elif not feishu_result.get("attempted"):
             yield event.plain_result(
                 f"ℹ️ 飞书未发布：{feishu_result.get('reason', 'unknown')}"
@@ -903,7 +1047,11 @@ class VideoAnalyzerPlugin(Star):
                 if feishu_result.get("attempted") and feishu_result.get("success"):
                     doc_url = (feishu_result.get("detail") or {}).get("doc_url", "")
                     if doc_url:
-                        yield event.plain_result(f"📚 飞书发布成功：{doc_url}")
+                        sent = await self._try_send_feishu_card_reply(
+                            event, doc_url, note, video_url
+                        )
+                        if not sent:
+                            yield event.plain_result(f"🔗 打开飞书文档：{doc_url}")
 
                 # 更新已推送记录
                 self.subscription_mgr.update_last_video(origin, mid, latest_bvid)
@@ -1184,7 +1332,7 @@ class VideoAnalyzerPlugin(Star):
 
         # 生成总结
         note, artifacts = await self._generate_note(video_url)
-        await self._try_push_note_to_feishu(
+        feishu_result = await self._try_push_note_to_feishu(
             note, video_url, source="auto", artifacts=artifacts
         )
 
@@ -1204,6 +1352,13 @@ class VideoAnalyzerPlugin(Star):
         for target in push_origins:
             try:
                 await self.context.send_message(target, chain)
+                if feishu_result.get("attempted") and feishu_result.get("success"):
+                    doc_url = (feishu_result.get("detail") or {}).get("doc_url", "")
+                    if doc_url:
+                        # 自动推送场景没有 event，可直接降级为链接通知
+                        await self.context.send_message(
+                            target, [Plain(f"🔗 打开飞书文档：{doc_url}")]
+                        )
                 logger.info(f"已推送新视频总结给 {target}")
             except Exception as e:
                 logger.error(f"推送消息到 {target} 失败: {e}")
